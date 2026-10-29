@@ -88,7 +88,7 @@ fun DeepAnalyticsTabContent(
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = "👑 24-FORMULA AI MATRIX",
+                                text = "👑 30-FORMULA AI MATRIX",
                                 fontFamily = OrbitronFamily,
                                 fontWeight = FontWeight.Black,
                                 fontSize = 12.sp,
@@ -104,7 +104,7 @@ fun DeepAnalyticsTabContent(
                         )
                     }
 
-                    // Multi-Horizon Market Stability & Pattern DNA Bar
+                    // Server Vulnerability + Multi-Horizon Market Stability & Pattern DNA Bar
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -113,26 +113,35 @@ fun DeepAnalyticsTabContent(
                             .border(1.dp, CyberCyan.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
                             .padding(horizontal = 8.dp, vertical = 5.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Text(
-                                text = pred.patternDnaMatchInfoBn,
+                                text = pred.detectedVulnerabilityBn,
                                 fontFamily = JetBrainsMonoFamily,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 8.5.sp,
-                                color = VipGold,
-                                maxLines = 1
+                                color = NeonGreen
                             )
-                            Text(
-                                text = "${pred.multiHorizonTrendSummary} • STAB ${pred.marketStabilityPercent}%",
-                                fontFamily = JetBrainsMonoFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 8.sp,
-                                color = CyberCyan
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = pred.patternDnaMatchInfoBn,
+                                    fontFamily = JetBrainsMonoFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 8.5.sp,
+                                    color = VipGold,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    text = "${pred.multiHorizonTrendSummary} • STAB ${pred.marketStabilityPercent}%",
+                                    fontFamily = JetBrainsMonoFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 8.sp,
+                                    color = CyberCyan
+                                )
+                            }
                         }
                     }
 

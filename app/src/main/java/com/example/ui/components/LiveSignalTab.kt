@@ -670,10 +670,10 @@ fun Casino3DBall(
 @Composable
 private fun VipSniperFormulaBentoStrip(prediction: QuantumPrediction) {
     val items = listOf(
-        Triple("🎯 P+N CROSS", prediction.diagonalCrossCandidate, VipGold),
-        Triple("📐 SKIP-1 MID", prediction.skipOneMidpointCandidate, NeonGreen),
-        Triple("🔟 10-COMP", prediction.tenComplementCandidate, CyberCyan),
-        Triple("🌊 5-ECHO", prediction.fiveCycleEchoCandidate, NeonViolet)
+        Triple("⚡ 10%-EQ", prediction.zeroBonusSniperCandidate, NeonGreen),
+        Triple("👑 5-BALL", prediction.fiveBallHeaderCandidate, VipGold),
+        Triple("🎯 P+N CROSS", prediction.diagonalCrossCandidate, CyberCyan),
+        Triple("🔟 10-COMP", prediction.tenComplementCandidate, NeonViolet)
     )
 
     Row(
@@ -757,7 +757,7 @@ private fun VipAiVaultAndEnergyDock(
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     Text(
-                        text = "🧠 SELF-LEARNING AI",
+                        text = "🧠 30-FORMULA AI",
                         fontFamily = OrbitronFamily,
                         fontWeight = FontWeight.Black,
                         fontSize = 10.sp,
@@ -831,7 +831,7 @@ private fun VipAiVaultAndEnergyDock(
                 }
             }
 
-            // Discovered Transition + 5-Step Pattern DNA & Multi-Horizon Trend Box
+            // Discovered Transition + Server Vulnerability + 5-Step Pattern DNA Box
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -842,12 +842,12 @@ private fun VipAiVaultAndEnergyDock(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        text = prediction.aiDiscoveredRuleBn,
+                        text = prediction.detectedVulnerabilityBn,
                         fontFamily = JetBrainsMonoFamily,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 9.sp,
-                        color = Color.White,
-                        maxLines = 1,
+                        fontSize = 8.5.sp,
+                        color = VipGold,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                     Row(

@@ -174,8 +174,10 @@ fun InteractiveWebEngineTab(
         mutableStateOf<String?>("https://dkwin9.com/#/saasLottery/WinGo?gameCode=WinGo_30S&lottery=WinGo")
     }
     var helperStatus by remember {
-        mutableStateOf("🟢 DKWin9 Live Hook + DOM Scanner সক্রিয়")
+        mutableStateOf("🟢 DKWin9 V4 Deep Vulnerability + Auto-Login প্রস্তুত")
     }
+    var loginPhone by remember { mutableStateOf("01851604054") }
+    var loginPassword by remember { mutableStateOf("Jafor212") }
 
     val pred = uiState.prediction
     val isBig = pred.predictedSize == "BIG"
@@ -186,6 +188,30 @@ fun InteractiveWebEngineTab(
             ?.coerceIn(1, uiState.selectedStepCount) ?: 1
     }
     val activeBetAmount = uiState.fundSteps.firstOrNull { it.level == activeFundLvl }?.betAmount ?: 10
+
+    val triggerAutoLogin: () -> Unit = {
+        val safePhone = loginPhone.trim().replace("'", "")
+        val safePass = loginPassword.trim().replace("'", "")
+        val autoLoginJs = """
+            (function(){
+                if (window.__dkwinAutoLogin) {
+                    return window.__dkwinAutoLogin('$safePhone', '$safePass');
+                }
+                return 'REDIRECT';
+            })();
+        """.trimIndent()
+        webViewRef?.evaluateJavascript(autoLoginJs) { res ->
+            if (res == null || res.contains("REDIRECT") || res.contains("NO_INPUT")) {
+                val loginUrl = "https://dkwin9.com/#/login"
+                urlInput = loginUrl
+                activeExternalUrl = loginUrl
+                webViewRef?.loadUrl(loginUrl)
+                helperStatus = "🔑 লগইন পেজ লোড হচ্ছে — অটো-ফিল ($safePhone) প্রস্তুত..."
+            } else {
+                helperStatus = "✅ অটো-লগইন ($safePhone) সম্পন্ন! গেম ও এনার্জি ডাটা সিঙ্ক হচ্ছে..."
+            }
+        }
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -206,7 +232,7 @@ fun InteractiveWebEngineTab(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         Box(
                             modifier = Modifier
@@ -220,13 +246,13 @@ fun InteractiveWebEngineTab(
                                     if (uiState.remainingSeconds <= 6) NeonRed else CyberCyan,
                                     RoundedCornerShape(7.dp)
                                 )
-                                .padding(horizontal = 6.dp, vertical = 3.dp)
+                                .padding(horizontal = 5.dp, vertical = 3.dp)
                         ) {
                             Text(
                                 text = "⏱ ${uiState.remainingSeconds}s • #${pred.nextPeriod.takeLast(4)}",
                                 fontFamily = OrbitronFamily,
                                 fontWeight = FontWeight.Black,
-                                fontSize = 10.sp,
+                                fontSize = 9.5.sp,
                                 color = if (uiState.remainingSeconds <= 6) NeonRed else CyberCyan
                             )
                         }
@@ -235,7 +261,7 @@ fun InteractiveWebEngineTab(
                             text = pred.predictedSize,
                             fontFamily = OrbitronFamily,
                             fontWeight = FontWeight.Black,
-                            fontSize = 18.sp,
+                            fontSize = 17.sp,
                             color = sigColor
                         )
 
@@ -244,13 +270,13 @@ fun InteractiveWebEngineTab(
                                 .clip(RoundedCornerShape(7.dp))
                                 .background(NeonBlue.copy(alpha = 0.18f))
                                 .border(1.dp, NeonBlue, RoundedCornerShape(7.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
                         ) {
                             Text(
                                 text = "#${pred.primaryNumber}/${pred.backupNumber}",
                                 fontFamily = OrbitronFamily,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
+                                fontSize = 10.5.sp,
                                 color = NeonBlue
                             )
                         }
@@ -259,15 +285,33 @@ fun InteractiveWebEngineTab(
                             text = "L$activeFundLvl:৳$activeBetAmount",
                             fontFamily = JetBrainsMonoFamily,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 9.5.sp,
+                            fontSize = 9.sp,
                             color = NeonAmber
                         )
                     }
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
+                        // 1-Tap VIP Auto-Login Button
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(7.dp))
+                                .background(NeonAmber.copy(alpha = 0.18f))
+                                .border(1.dp, NeonAmber, RoundedCornerShape(7.dp))
+                                .clickable { triggerAutoLogin() }
+                                .padding(horizontal = 5.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "🔑 LOGIN",
+                                fontFamily = OrbitronFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 8.sp,
+                                color = NeonAmber
+                            )
+                        }
+
                         // 1-Tap Highlight Signal on Game Page
                         Box(
                             modifier = Modifier
@@ -281,7 +325,7 @@ fun InteractiveWebEngineTab(
                                             const els = Array.from(document.querySelectorAll('div,button,span'));
                                             els.forEach(function(el){
                                                 const t = (el.innerText || '').trim().toUpperCase();
-                                                if (t === targetWord || t === '${pred.primaryNumber}') {
+                                                if (t === targetWord || t === '${pred.primaryNumber}' || t === '${pred.backupNumber}') {
                                                     el.style.outline = '3px solid #FFD700';
                                                     el.style.boxShadow = '0 0 18px #00FF88';
                                                 }
@@ -290,15 +334,15 @@ fun InteractiveWebEngineTab(
                                         })();
                                     """.trimIndent()
                                     webViewRef?.evaluateJavascript(highlightJs, null)
-                                    helperStatus = "🎯 গেম পেজে ${pred.predictedSize} ও #${pred.primaryNumber} হাইলাইট করা হয়েছে!"
+                                    helperStatus = "🎯 গেম পেজে ${pred.predictedSize} ও #${pred.primaryNumber}/#${pred.backupNumber} মার্ক করা হয়েছে!"
                                 }
-                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                                .padding(horizontal = 5.dp, vertical = 4.dp)
                         ) {
                             Text(
                                 text = "🎯 MARK",
                                 fontFamily = OrbitronFamily,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 8.5.sp,
+                                fontSize = 8.sp,
                                 color = sigColor
                             )
                         }
@@ -309,46 +353,54 @@ fun InteractiveWebEngineTab(
                                 .background(Color(0xFF0E182B))
                                 .border(1.dp, CyberCyan.copy(alpha = 0.4f), RoundedCornerShape(7.dp))
                                 .clickable { onToggleMiniHud() }
-                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                                .padding(horizontal = 5.dp, vertical = 4.dp)
                         ) {
                             Text(
                                 text = if (uiState.isMiniHudMode) "🔼 TOOLS" else "🔽 MINI",
                                 fontFamily = JetBrainsMonoFamily,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 8.5.sp,
+                                fontSize = 8.sp,
                                 color = CyberCyan
                             )
                         }
                     }
                 }
 
-                // Expanded Tools & 24-Formula Telemetry when Mini HUD is expanded
+                // Expanded Tools & 30-Formula Vulnerability Telemetry when Mini HUD is expanded
                 if (!uiState.isMiniHudMode) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "DIAG: #${pred.diagonalCrossCandidate} • SKIP-1: #${pred.skipOneMidpointCandidate} • 10-COMP: #${pred.tenComplementCandidate}",
+                            text = "10%-EQ: #${pred.zeroBonusSniperCandidate} • 5-BALL: #${pred.fiveBallHeaderCandidate} • DIAG: #${pred.diagonalCrossCandidate} • 10-COMP: #${pred.tenComplementCandidate}",
                             fontFamily = JetBrainsMonoFamily,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 9.5.sp,
+                            fontSize = 9.sp,
                             color = NeonGreen
                         )
                         Text(
                             text = "CONF: ${pred.confidence}% • STAB: ${pred.marketStabilityPercent}%",
                             fontFamily = OrbitronFamily,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 9.5.sp,
+                            fontSize = 9.sp,
                             color = NeonAmber
                         )
                     }
 
                     Text(
+                        text = pred.detectedVulnerabilityBn,
+                        fontFamily = JetBrainsMonoFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 9.sp,
+                        color = NeonAmber
+                    )
+
+                    Text(
                         text = pred.patternDnaMatchInfoBn,
                         fontFamily = JetBrainsMonoFamily,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 9.5.sp,
+                        fontSize = 9.sp,
                         color = CyberCyan
                     )
 
@@ -404,6 +456,25 @@ fun InteractiveWebEngineTab(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(8.dp))
+                                    .background(NeonGreen.copy(alpha = 0.18f))
+                                    .border(1.dp, NeonGreen, RoundedCornerShape(8.dp))
+                                    .clickable { triggerAutoLogin() }
+                                    .padding(vertical = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "🔑 AUTO LOGIN ($loginPhone)",
+                                    fontFamily = JetBrainsMonoFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 9.sp,
+                                    color = NeonGreen
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
                                     .background(NeonAmber.copy(alpha = 0.18f))
                                     .border(1.dp, NeonAmber, RoundedCornerShape(8.dp))
                                     .clickable {
@@ -420,7 +491,7 @@ fun InteractiveWebEngineTab(
                                     text = "🎯 OPEN WINGO 30S",
                                     fontFamily = JetBrainsMonoFamily,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 9.5.sp,
+                                    fontSize = 9.sp,
                                     color = NeonAmber
                                 )
                             }
@@ -432,17 +503,20 @@ fun InteractiveWebEngineTab(
                                     .background(CyberCyan.copy(alpha = 0.18f))
                                     .border(1.dp, CyberCyan, RoundedCornerShape(8.dp))
                                     .clickable {
-                                        webViewRef?.evaluateJavascript("if(window.__scanDkwinDom) window.__scanDkwinDom();", null)
-                                        helperStatus = "📊 DKWin9 বোর্ড থেকে লাইভ চার্ট ও ড্র স্ক্যান সম্পন্ন!"
+                                        webViewRef?.evaluateJavascript(
+                                            "if(window.__scanDkwinDom) window.__scanDkwinDom(true);",
+                                            null
+                                        )
+                                        helperStatus = "📊 DKWin9 এনার্জি র‍্যাংকিং, চার্ট ও ৫০টি ড্র স্ক্যান সম্পন্ন!"
                                     }
                                     .padding(vertical = 6.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "📊 SCAN LIVE BOARD",
+                                    text = "⚡ DEEP SCAN",
                                     fontFamily = JetBrainsMonoFamily,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 9.5.sp,
+                                    fontSize = 9.sp,
                                     color = CyberCyan
                                 )
                             }
@@ -526,11 +600,21 @@ fun InteractiveWebEngineTab(
                                 webViewClient = object : WebViewClient() {
                                     override fun onPageFinished(view: WebView?, url: String?) {
                                         super.onPageFinished(view, url)
-                                        // Inject XHR, Fetch, AND Live DOM History/Chart Scanner for DKWin9
+                                        // Inject V4 XHR, Fetch, Auto-Login, AND Live DOM Energy/Chart Scanner for DKWin9
                                         view?.evaluateJavascript(
                                             DKWIN9_DEEP_INTERCEPTOR_JS,
                                             null
                                         )
+                                        if (url != null && url.contains("login", ignoreCase = true)) {
+                                            val safePhone = loginPhone.trim().replace("'", "")
+                                            val safePass = loginPassword.trim().replace("'", "")
+                                            view?.postDelayed({
+                                                view.evaluateJavascript(
+                                                    "if(window.__dkwinAutoLogin) window.__dkwinAutoLogin('$safePhone', '$safePass');",
+                                                    null
+                                                )
+                                            }, 900L)
+                                        }
                                     }
                                 }
                                 webChromeClient = WebChromeClient()
@@ -582,16 +666,83 @@ fun InteractiveWebEngineTab(
 }
 
 /**
- * Deep JavaScript Hook injected into dkwin9.com:
- * 1. Hooks window.fetch and XMLHttpRequest to capture GetHistoryIssuePage.json and saasLottery payloads.
- * 2. Runs a DOM Scanner (__scanDkwinDom) every 2 seconds that extracts 17-digit period numbers
- *    (e.g. 20261028100052032) and their drawn digit (0-9) directly from the rendered DKWin9 Game History
- *    table and pipes them straight into AndroidBridge.postJson!
+ * Deep JavaScript Hook V4 injected into dkwin9.com:
+ * 1. Hooks window.fetch and XMLHttpRequest to capture GetHistoryIssuePage.json, Energy/GetPanel, and saasLottery payloads.
+ * 2. Provides window.__dkwinAutoLogin(phone, pass) using React/Vue native property setters to auto-fill credentials and log in.
+ * 3. Runs a DOM + Authenticated Token Scanner (__scanDkwinDom) every 2 seconds that extracts:
+ *    - 17-digit period numbers and drawn digits (0-9)
+ *    - 0-9 Energy Ranking percentages AND ↑/↓ trend deltas (e.g., ↓5 9%, ↑2 17%, ↑1 10%)
+ *    - Active JWT Bearer token from localStorage/sessionStorage to query Energy/GetPanel directly!
  */
 private val DKWIN9_DEEP_INTERCEPTOR_JS = """
 (function() {
-    if (window.__dkwinHookedV3) return;
-    window.__dkwinHookedV3 = true;
+    if (window.__dkwinHookedV4) return;
+    window.__dkwinHookedV4 = true;
+
+    function setNativeInputValue(inputEl, val) {
+        if (!inputEl) return;
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        if (nativeSetter) {
+            nativeSetter.call(inputEl, val);
+        } else {
+            inputEl.value = val;
+        }
+        inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+        inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+        inputEl.dispatchEvent(new Event('blur', { bubbles: true }));
+    }
+
+    window.__dkwinAutoLogin = function(phoneRaw, passwordRaw) {
+        try {
+            const inputs = Array.from(document.querySelectorAll('input'));
+            const passInput = inputs.find(function(el) {
+                return el.type === 'password' ||
+                    (el.placeholder && el.placeholder.toLowerCase().indexOf('password') !== -1);
+            });
+            const phoneInput = inputs.find(function(el) {
+                if (el === passInput) return false;
+                const t = (el.type || '').toLowerCase();
+                const p = (el.placeholder || '').toLowerCase();
+                return t === 'tel' || t === 'number' || t === 'text' ||
+                    p.indexOf('phone') !== -1 || p.indexOf('number') !== -1 || p.indexOf('account') !== -1;
+            });
+
+            if (!phoneInput || !passInput) {
+                if (location.hash.indexOf('login') === -1) {
+                    location.hash = '#/login';
+                }
+                return 'NO_INPUT';
+            }
+
+            // Handle +880 prefix: if maxLength is 10 or page shows +880 prefix and phone starts with 01, try full or stripped
+            const bodyTxt = document.body ? document.body.innerText : '';
+            let cleanPhone = String(phoneRaw || '').trim();
+            if (phoneInput.maxLength === 10 && cleanPhone.length === 11 && cleanPhone.indexOf('0') === 0) {
+                cleanPhone = cleanPhone.slice(1);
+            }
+            setNativeInputValue(phoneInput, cleanPhone);
+            setNativeInputValue(passInput, String(passwordRaw || '').trim());
+
+            // Also check agreement checkbox if unchecked
+            const checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"], .van-checkbox[aria-checked="false"]'));
+            checkboxes.forEach(function(cb) {
+                try { cb.click(); } catch(e) {}
+            });
+
+            setTimeout(function() {
+                const btns = Array.from(document.querySelectorAll('button, div[role="button"], .login-btn, .van-button'));
+                const loginBtn = btns.find(function(b) {
+                    const txt = (b.innerText || '').trim().toLowerCase();
+                    return txt === 'log in' || txt === 'login' || txt.indexOf('log in') !== -1;
+                });
+                if (loginBtn) loginBtn.click();
+            }, 350);
+
+            return 'OK_FILLED';
+        } catch (e) {
+            return 'ERR:' + e.message;
+        }
+    };
 
     function shouldForwardApi(url, bodyText) {
         if (!bodyText) return false;
@@ -601,7 +752,8 @@ private val DKWIN9_DEEP_INTERCEPTOR_JS = """
             u.indexOf('Lottery/GetWinLossResult') !== -1 ||
             u.indexOf('Lottery/WinGoBet') !== -1 ||
             u.indexOf('WinGo_30S') !== -1 ||
-            u.indexOf('GetHistoryIssuePage') !== -1) {
+            u.indexOf('GetHistoryIssuePage') !== -1 ||
+            u.indexOf('GetNoaverageEmerdList') !== -1) {
             return true;
         }
         return (bodyText.indexOf('issueNumber') !== -1 ||
@@ -652,7 +804,7 @@ private val DKWIN9_DEEP_INTERCEPTOR_JS = """
         return origOpen.apply(this, arguments);
     };
 
-    window.__scanDkwinDom = function() {
+    window.__scanDkwinDom = function(forceEnergyPoll) {
         try {
             const bodyText = document.body ? document.body.innerText : '';
             if (!bodyText) return;
@@ -674,23 +826,52 @@ private val DKWIN9_DEEP_INTERCEPTOR_JS = """
                     }
                 }
             }
-            // Also scan for 10 Energy Ranking percentages (e.g. 9%, 11%, 17%...) if Energy Boost modal is open!
+            // Scan for 10 Energy Ranking percentages (e.g. 9%, 11%, 17%...) and ↑/↓ trend deltas (↓5, ↓1, ↑2, ↑1...)
             const pctMatches = bodyText.match(/\b([1-9]|[1-4][0-9])%/g);
             let energyArr = null;
+            let deltaArr = null;
             if (pctMatches && pctMatches.length >= 10) {
                 energyArr = pctMatches.slice(0, 10).map(function(s){ return parseInt(s, 10) || 10; });
+                const arrowMatches = bodyText.match(/[↑↓]\s*\d+/g);
+                if (arrowMatches && arrowMatches.length >= 6) {
+                    deltaArr = [];
+                    for (let k = 0; k < 10; k++) {
+                        const rawA = arrowMatches[k] || '↑1';
+                        const numVal = parseInt(rawA.replace(/[^\d]/g, ''), 10) || 1;
+                        deltaArr.push(rawA.indexOf('↓') !== -1 ? -numVal : numVal);
+                    }
+                }
             }
             if ((extracted.length >= 4 || energyArr) && window.AndroidBridge) {
                 const payload = {};
                 if (extracted.length >= 4) payload.data = { list: extracted };
                 if (energyArr) payload.energyPercents = energyArr;
+                if (deltaArr) payload.energyDeltas = deltaArr;
                 window.AndroidBridge.postJson(JSON.stringify(payload));
+            }
+
+            // If logged in (token in localStorage), also poll official Energy/GetPanel directly
+            if (forceEnergyPoll) {
+                let token = null;
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i) || '';
+                    const v = localStorage.getItem(k) || '';
+                    if (k.toLowerCase().indexOf('token') !== -1 && v.length > 15) {
+                        token = v.replace(/^"|"$/g, '');
+                        break;
+                    }
+                }
+                if (token) {
+                    fetch('https://api.ar-lottery01.com/api/Energy/GetPanel?gameCode=WinGo_30S', {
+                        headers: { 'Authorization': token.indexOf('Bearer') === 0 ? token : ('Bearer ' + token) }
+                    }).catch(function(){});
+                }
             }
         } catch(e) {}
     };
 
-    setInterval(window.__scanDkwinDom, 2000);
-    setTimeout(window.__scanDkwinDom, 1200);
+    setInterval(function(){ window.__scanDkwinDom(false); }, 2000);
+    setTimeout(function(){ window.__scanDkwinDom(true); }, 1200);
 })();
 """.trimIndent()
 
@@ -784,26 +965,38 @@ function analyze(H){
   const prem=String(H[0].premium||'');
   let premSum=0; for(let c of prem){if(c>='0'&&c<='9')premSum+=Number(c);}
   const pTail=Number(String(H[0].period).slice(-2))||0;
+  const pLast=Number(String(H[0].period).slice(-1))||0;
   const seedPred=((premSum+pTail+H[0].number*3)%10)>=5?'BIG':'SMALL';
   if(seedPred==='BIG')big+=4.5; else small+=4.5;
+  // Diagonal Period+Result Cross
+  const diagCross=(pLast===H[0].number)?((10-H[0].number)%10):((pLast+H[0].number)%10);
+  if(diagCross>=5)big+=5.5; else small+=5.5;
+  // 5-Ball Header Outer-Inner Bridge
+  let fiveBallTarget=diagCross;
+  if(H.length>=5){
+    const sum5=H[0].number+H[1].number+H[2].number+H[3].number+H[4].number;
+    fiveBallTarget=(Math.abs((H[0].number+H[4].number)-(H[1].number+H[3].number))+H[2].number)%10;
+    if(sum5>=29)small+=6; else if(sum5<=15)big+=6;
+    else if(fiveBallTarget>=5)big+=5; else small+=5;
+  }
   if(H.length>=2 && H[0].number===H[1].number){
     const comp10=(10-H[0].number)%10;
     if(comp10>=5)big+=6; else small+=6;
   }
-  if(H.length>=3){
-    const dSum=H[0].number+H[1].number+H[2].number+(pTail+1);
-    if(dSum%2===0)big+=3.5; else small+=3.5;
+  if(H.length>=4){
+    const skipMid=Math.floor((H[1].number+H[3].number)/2);
+    if(skipMid>=5)big+=4; else small+=4;
   }
   let st=1; for(let i=1;i<sizes.length;i++){if(sizes[i]===sizes[0])st++;else break;}
   if(H[0].number===0||H[0].number===5){if(sizes[0]==='BIG')small+=5;else big+=5;}
   else if(st>=4){if(sizes[0]==='BIG')small+=7;else big+=7;}
   else if(st===2){if(sizes[0]==='BIG')big+=3;else small+=3;}
   const pred=big>=small?'BIG':'SMALL';
-  const conf=Math.min(96,Math.max(64,Math.round(66+Math.abs(big-small)*3.2)));
+  const conf=Math.min(97,Math.max(68,Math.round(68+Math.abs(big-small)*2.6)));
   const comp10=(10-H[0].number)%10;
-  const n1=pred==='BIG'?(comp10>=5?comp10:((H[0].number+3)%5+5)):(comp10<5?comp10:((H[0].number+2)%5));
-  const n2=pred==='BIG'?((n1+2)%5+5):((n1+2)%5);
-  return {prediction:pred,confidence:conf,number:n1+' / '+n2,color:colorOf(n1),pattern:'⚡ 10-COMP (#'+comp10+') + SEED ('+seedPred+')'};
+  const n1=pred==='BIG'?(fiveBallTarget>=5?fiveBallTarget:(diagCross>=5?diagCross:((H[0].number+3)%5+5))):(fiveBallTarget<5?fiveBallTarget:(diagCross<5?diagCross:((H[0].number+2)%5)));
+  const n2=pred==='BIG'?(comp10>=5&&comp10!==n1?comp10:((n1+2)%5+5)):(comp10<5&&comp10!==n1?comp10:((n1+2)%5));
+  return {prediction:pred,confidence:conf,number:n1+' / '+n2,color:colorOf(n1),pattern:'👑 5-BALL (#'+fiveBallTarget+') • P+N (#'+diagCross+') • 10-COMP (#'+comp10+')'};
 }
 async function poll(){
   try{

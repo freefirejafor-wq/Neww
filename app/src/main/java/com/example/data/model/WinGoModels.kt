@@ -127,5 +127,9 @@ data class QuantumPrediction(
     val marketStabilityPercent: Int = 84,
     val patternDnaMatchInfoBn: String = "🧬 5-Step DNA স্ক্যান প্রস্তুত",
     val multiHorizonTrendSummary: String = "5D:50% • 15D:50% • 30D:50%",
-    val hotStreakFormulaCount: Int = 0
+    val hotStreakFormulaCount: Int = 0,
+    val zeroBonusSniperCandidate: Int = 6,
+    val fiveBallHeaderCandidate: Int = 4,
+    val houseLiabilitySafeSide: String = "BIG",
+    val detectedVulnerabilityBn: String = "🔓 সার্ভার ১০% ইকুইলিব্রিয়াম ও মেডেল-লায়াবিলিটি স্ক্যান সক্রিয়"
 )

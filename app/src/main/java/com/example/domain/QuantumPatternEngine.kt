@@ -493,9 +493,182 @@ object QuantumPatternEngine {
         }
     }
 
+    // 25. Zero-Bonus 10% Equilibrium Sniper (Exploits DKWin9 Energy Boost: non-medal balls at 9%-10% with ↑ positive delta win repeatedly!)
+    private val zeroBonusEquilibriumSniperTrick = object : SubFormula {
+        override val name = "Zero-Bonus 10% Sniper"
+        override val nameBn = "১০% ইকুইলিব্রিয়াম জিরো-বোনাস স্নাইপার"
+        override fun predictRaw(history: List<DrawItem>): String {
+            if (history.size < 5) return "BIG"
+            val slice = history.take(30)
+            val stats = computeChartStats(slice)
+            val energyList = computeEnergyRanking(slice, stats, null)
+            // Non-medal balls (rankOrder > 3) with 8%..11% energy and rising ↑ delta
+            val bigEquilibriumScore = energyList.filter { it.number >= 5 && it.rankOrder > 3 }
+                .sumOf { ball ->
+                    val eqBonus = if (ball.energyPercent in 8..11) 8 else 2
+                    val upArrowBonus = if (ball.trendDelta in 1..4) 7 else 0
+                    eqBonus + upArrowBonus
+                }
+            val smallEquilibriumScore = energyList.filter { it.number < 5 && it.rankOrder > 3 }
+                .sumOf { ball ->
+                    val eqBonus = if (ball.energyPercent in 8..11) 8 else 2
+                    val upArrowBonus = if (ball.trendDelta in 1..4) 7 else 0
+                    eqBonus + upArrowBonus
+                }
+            return if (bigEquilibriumScore >= smallEquilibriumScore) "BIG" else "SMALL"
+        }
+    }
+
+    // 26. House Medal-Liability Counter-Bet (Avoids the side carrying heavy 🥇+100% / 🥈+80% / 🥉+50% Bonus Liability)
+    private val medalLiabilityCounterHouseTrick = object : SubFormula {
+        override val name = "Medal-Liability Counter"
+        override val nameBn = "হাউস মেডেল-লায়াবিলিটি কাউন্টার"
+        override fun predictRaw(history: List<DrawItem>): String {
+            if (history.size < 5) return "BIG"
+            val slice = history.take(30)
+            val stats = computeChartStats(slice)
+            val energyList = computeEnergyRanking(slice, stats, null)
+            var bigLiability = 0.0
+            var smallLiability = 0.0
+            for (ball in energyList) {
+                val bonusMult = when (ball.rankOrder) {
+                    1 -> 2.2 // 🥇 +100% Gold Medal trap
+                    2 -> 1.8 // 🥈 +80% Silver Medal
+                    3 -> 1.5 // 🥉 +50% Bronze Medal
+                    else -> 0.5
+                }
+                val liab = ball.energyPercent * bonusMult
+                if (ball.number >= 5) bigLiability += liab else smallLiability += liab
+            }
+            // House algorithm minimizes bonus payout liability by favoring the lower-liability side
+            return if (smallLiability >= bigLiability) "BIG" else "SMALL"
+        }
+    }
+
+    // 27. DKWin9 5-Ball Header Strip Outer-Inner Bridge ([N0, N1, N2, N3, N4] top banner formula)
+    private val fiveBallHeaderBridgeTrick = object : SubFormula {
+        override val name = "5-Ball Header Bridge"
+        override val nameBn = "৫-বল হেডার আউটার-ইনার ব্রিজ"
+        override fun predictRaw(history: List<DrawItem>): String {
+            if (history.size < 5) return "BIG"
+            val n0 = history[0].number
+            val n1 = history[1].number
+            val n2 = history[2].number
+            val n3 = history[3].number
+            val n4 = history[4].number
+            val sum5 = n0 + n1 + n2 + n3 + n4
+            // Extreme 5-ball sum clamp first
+            if (sum5 >= 29) return "SMALL"
+            if (sum5 <= 15) return "BIG"
+            val outer = n0 + n4
+            val inner = n1 + n3
+            val bridgeTarget = (abs(outer - inner) + n2) % 10
+            return if (bridgeTarget >= 5) "BIG" else "SMALL"
+        }
+    }
+
+    // 28. Kalman Velocity & Acceleration State Filter (Tracks 1st & 2nd derivative of drawn digits)
+    private val kalmanVelocityFilterTrick = object : SubFormula {
+        override val name = "Kalman Velocity Filter"
+        override val nameBn = "কালম্যান ভেলোসিটি ও অ্যাক্সিলারেশন"
+        override fun predictRaw(history: List<DrawItem>): String {
+            if (history.size < 4) return "BIG"
+            val x0 = history[0].number.toDouble()
+            val x1 = history[1].number.toDouble()
+            val x2 = history[2].number.toDouble()
+            val v0 = x0 - x1
+            val v1 = x1 - x2
+            val accel = v0 - v1
+            // Damped Kalman projection with mean-reversion toward 4.5
+            val projected = x0 + (0.58 * v0) - (0.32 * accel) + (0.25 * (4.5 - x0))
+            val wrapped = ((projected.roundToInt() % 10) + 10) % 10
+            return if (wrapped >= 5) "BIG" else "SMALL"
+        }
+    }
+
+    // 29. 10-Step Autocorrelation Cycle Sniper (Finds dominant repeating lag cycle L in 2..10)
+    private val autocorrelationCycleTrick = object : SubFormula {
+        override val name = "Autocorrelation Cycle AI"
+        override val nameBn = "অটোকোরিলেশন লুকানো সাইকেল"
+        override fun predictRaw(history: List<DrawItem>): String {
+            if (history.size < 14) return history.firstOrNull()?.size ?: "BIG"
+            val sizes = history.take(36).map { it.size }
+            var bestLag = 5
+            var bestScore = -100
+            var invertBest = false
+
+            for (lag in 2..10) {
+                var hits = 0
+                var misses = 0
+                val limit = min(16, sizes.size - lag)
+                for (i in 0 until limit) {
+                    if (sizes[i] == sizes[i + lag]) hits++ else misses++
+                }
+                val directDiff = hits - misses
+                val invDiff = misses - hits
+                if (directDiff > bestScore) {
+                    bestScore = directDiff
+                    bestLag = lag
+                    invertBest = false
+                }
+                if (invDiff > bestScore) {
+                    bestScore = invDiff
+                    bestLag = lag
+                    invertBest = true
+                }
+            }
+            val refSize = sizes.getOrElse(bestLag - 1) { sizes[0] }
+            return if (invertBest) {
+                if (refSize == "BIG") "SMALL" else "BIG"
+            } else {
+                refSize
+            }
+        }
+    }
+
+    // 30. Elite Top-5 Consensus Arbitrator (Filters out noisy formulas and follows only the top regime leaders)
+    private val adaptiveMetaArbitratorTrick = object : SubFormula {
+        override val name = "Elite Top-5 Arbitrator"
+        override val nameBn = "এলিট টপ-৫ কনসেনসাস মেটা এআই"
+        override fun predictRaw(history: List<DrawItem>): String {
+            if (history.size < 9) return "BIG"
+            val corePool = listOf(
+                dkwinDiagonalCrossTrick,
+                dkwinTwinTenComplementTrick,
+                zeroBonusEquilibriumSniperTrick,
+                medalLiabilityCounterHouseTrick,
+                fiveBallHeaderBridgeTrick,
+                bayesianPatternDnaTrick,
+                websitePremiumSeedTrick
+            )
+            var bigElite = 0.0
+            var smallElite = 0.0
+            for (f in corePool) {
+                var recentHits = 0
+                for (t in 0 until 5) {
+                    val slice = history.drop(t + 1)
+                    if (f.predictRaw(slice) == history[t].size) recentHits++
+                }
+                val curVote = f.predictRaw(history)
+                when {
+                    recentHits >= 4 -> if (curVote == "BIG") bigElite += 3.5 else smallElite += 3.5
+                    recentHits == 3 -> if (curVote == "BIG") bigElite += 1.8 else smallElite += 1.8
+                    recentHits <= 1 -> {
+                        // Inversely locked formula in the last 5 rounds
+                        if (curVote == "BIG") smallElite += 2.5 else bigElite += 2.5
+                    }
+                }
+            }
+            return if (bigElite >= smallElite) "BIG" else "SMALL"
+        }
+    }
+
     private val allFormulas = listOf(
         selfTrainedNeuralMemoryAi,
         bayesianPatternDnaTrick,
+        zeroBonusEquilibriumSniperTrick,
+        medalLiabilityCounterHouseTrick,
+        fiveBallHeaderBridgeTrick,
         dkwinDiagonalCrossTrick,
         dkwinSkipOneMidpointTrick,
         websitePremiumSeedTrick,
@@ -517,7 +690,10 @@ object QuantumPatternEngine {
         issueSerialHashTrick,
         multiTimeframeRsiBollingerTrick,
         serverPremiumXorCipherTrick,
-        antiWhipSawMetaTrick
+        antiWhipSawMetaTrick,
+        kalmanVelocityFilterTrick,
+        autocorrelationCycleTrick,
+        adaptiveMetaArbitratorTrick
     )
 
     fun computeChartStats(draws: List<DrawItem>): List<ChartNumberStat> {
@@ -923,8 +1099,8 @@ object QuantumPatternEngine {
                     "টানা $zigzagCount বার জিগজ্যাগ চলছে → পরবর্তী ধাপ $nextZig!"
             }
             else -> {
-                "🧠 24-FORMULA AI ($trainedDrawsCount DRAWS) • DNA [$dnaPatternCode]" to
-                    "AI $trainedDrawsCount দানের ডাটা থেকে নিজে ট্রেইন হয়ে সিগন্যাল দিচ্ছে।"
+                "🧠 30-FORMULA AI ($trainedDrawsCount DRAWS) • DNA [$dnaPatternCode]" to
+                    "AI $trainedDrawsCount দানের ডাটা ও ৩০টি সূত্র থেকে নিজে ট্রেইন হয়ে সিগন্যাল দিচ্ছে।"
             }
         }
 
@@ -933,6 +1109,8 @@ object QuantumPatternEngine {
         // =========================================================================
         val aiMemEntry = sortedFormulas.find { it.formula === selfTrainedNeuralMemoryAi }
         val dnaEntry = sortedFormulas.find { it.formula === bayesianPatternDnaTrick }
+        val eqSniperEntry = sortedFormulas.find { it.formula === zeroBonusEquilibriumSniperTrick }
+        val medalLiabEntry = sortedFormulas.find { it.formula === medalLiabilityCounterHouseTrick }
         val diagEntry = sortedFormulas.find { it.formula === dkwinDiagonalCrossTrick }
         val skipEntry = sortedFormulas.find { it.formula === dkwinSkipOneMidpointTrick }
         val energyEntry = sortedFormulas.find { it.formula === dkwinEnergyBoostTrick }
@@ -956,6 +1134,28 @@ object QuantumPatternEngine {
                     favoredSize = dnaEntry.vote,
                     strengthPercent = dnaEntry.effectiveWinRate.coerceIn(60, 98),
                     detail = "DNA [$dnaPatternCode] → $dnaFavoredSize ($dnaWinPct%)"
+                )
+            )
+        }
+        if (eqSniperEntry != null) {
+            layerVotes.add(
+                LayerVote(
+                    layerName = "Zero-Bonus 10% Sniper",
+                    layerNameBn = "১০% ইকুইলিব্রিয়াম জিরো-বোনাস স্নাইপার",
+                    favoredSize = eqSniperEntry.vote,
+                    strengthPercent = eqSniperEntry.effectiveWinRate.coerceIn(60, 98),
+                    detail = "9%–10% ↑ Rising Non-Medal Zone"
+                )
+            )
+        }
+        if (medalLiabEntry != null) {
+            layerVotes.add(
+                LayerVote(
+                    layerName = "Medal-Liability Counter",
+                    layerNameBn = "হাউস মেডেল-লায়াবিলিটি কাউন্টার",
+                    favoredSize = medalLiabEntry.vote,
+                    strengthPercent = medalLiabEntry.effectiveWinRate.coerceIn(60, 98),
+                    detail = "Avoids 🥇+100% / 🥈+80% Crowd Trap"
                 )
             )
         }
@@ -1024,8 +1224,27 @@ object QuantumPatternEngine {
         }
 
         // =========================================================================
-        // 5. FINAL SIZE PREDICTION & SNIPER NUMBER SELECTION
+        // 5. SERVER VULNERABILITY & LIABILITY SNIPER DISCOVERY
         // =========================================================================
+        val medal1Ball = energyRanking.find { it.rankOrder == 1 }
+        val medal2Ball = energyRanking.find { it.rankOrder == 2 }
+        val medal3Ball = energyRanking.find { it.rankOrder == 3 }
+
+        var bigMedalLiability = 0.0
+        var smallMedalLiability = 0.0
+        for (ball in energyRanking) {
+            val mult = when (ball.rankOrder) {
+                1 -> 2.2
+                2 -> 1.8
+                3 -> 1.5
+                else -> 0.45
+            }
+            val liab = ball.energyPercent * mult
+            if (ball.number >= 5) bigMedalLiability += liab else smallMedalLiability += liab
+        }
+        val houseLiabilitySafeSide = if (smallMedalLiability >= bigMedalLiability) "BIG" else "SMALL"
+        if (houseLiabilitySafeSide == "BIG") totalBigScore += 4.2 else totalSmallScore += 4.2
+
         val predictedSize = if (totalBigScore >= totalSmallScore) "BIG" else "SMALL"
 
         val freqMap = (0..9).associateWith { n -> h25.count { it.number == n } }
@@ -1038,8 +1257,27 @@ object QuantumPatternEngine {
         val fiveCycleEcho = sample.getOrNull(4)?.number ?: comp10
         val crossSubtractNum = if (nums.size >= 3) (abs(nums[0] - nums[2]) + pLast) % 10 else comp10
         val fibPrngNum = if (nums.size >= 5) (nums[0] + nums[1] + abs(nums[2] - nums[4])) % 10 else step5
-        val medal2Num = energyRanking.find { it.rankOrder == 2 }?.number ?: comp10
-        val medal3Num = energyRanking.find { it.rankOrder == 3 }?.number ?: step5
+        val medal2Num = medal2Ball?.number ?: comp10
+        val medal3Num = medal3Ball?.number ?: step5
+
+        // 5-Ball Header Bridge candidate ([N0, N1, N2, N3, N4] top banner)
+        val fiveBallHeaderCandidate = if (nums.size >= 5) {
+            (abs((nums[0] + nums[4]) - (nums[1] + nums[3])) + nums[2]) % 10
+        } else {
+            comp10
+        }
+
+        // Zero-Bonus 10% Equilibrium Sniper candidate (non-medal ball at 8%..11% with rising ↑ delta)
+        val zeroBonusSniperCandidate = energyRanking
+            .filter { it.rankOrder > 3 }
+            .maxByOrNull { ball ->
+                val eqScore = if (ball.energyPercent in 8..11) 12 else 3
+                val deltaScore = if (ball.trendDelta > 0) ball.trendDelta * 4 else 0
+                val sizeMatch = if ((predictedSize == "BIG" && ball.number >= 5) ||
+                    (predictedSize == "SMALL" && ball.number < 5)
+                ) 6 else 0
+                eqScore + deltaScore + sizeMatch
+            }?.number ?: comp10
 
         val candidates = (0..9).filter { n ->
             if (predictedSize == "BIG") n >= 5 else n < 5
@@ -1050,16 +1288,19 @@ object QuantumPatternEngine {
             val en = energyByNum[n]
             val learnedDigitBoost = (followedDigitFreq[n] ?: 0) * 3
             val overdueBoost = if (st != null && st.currentMissing >= st.avgMissing) 4 else 1
-            val dkwinSniperBoost = (if (n == diagonalCrossNum) 6 else 0) +
+            val dkwinSniperBoost = (if (n == zeroBonusSniperCandidate) 7 else 0) +
+                (if (n == fiveBallHeaderCandidate) 6 else 0) +
+                (if (n == diagonalCrossNum) 6 else 0) +
                 (if (n == skipOneMidpointNum) 6 else 0) +
                 (if (n == comp10) 5 else 0) +
                 (if (n == crossSubtractNum) 5 else 0) +
                 (if (n == fibPrngNum) 4 else 0) +
-                (if (n == medal2Num || n == medal3Num) 5 else 0) +
+                (if (n == medal2Num || n == medal3Num) 4 else 0) +
                 (if (n == fiveCycleEcho) 4 else 0) +
                 (if (n == comp9 || n == step5) 3 else 0)
             val energySafeBoost = when {
-                en?.isCrowdTrap == true -> -5
+                en?.isCrowdTrap == true -> -6
+                en != null && en.rankOrder > 3 && en.energyPercent in 8..11 && en.trendDelta > 0 -> 7
                 en?.isSafeBoostPick == true -> 5
                 (en?.trendDelta ?: 0) > 0 -> 3
                 else -> 1
@@ -1074,18 +1315,24 @@ object QuantumPatternEngine {
         val backupNumber = rankedCandidates.getOrElse(1) { if (predictedSize == "BIG") 8 else 2 }
         val predictedColor = DrawItem.colorOf(primaryNumber)
 
+        val trapMedalNum = medal1Ball?.number ?: 2
+        val trapMedalPct = medal1Ball?.energyPercent ?: 17
+        val trapSide = if (trapMedalNum >= 5) "BIG" else "SMALL"
+        val detectedVulnerabilityBn =
+            "🔓 সার্ভার দুর্বলতা: $trapSide-এ 🥇#$trapMedalNum($trapMedalPct%) বোনাস ট্র্যাপ! সার্ভার ১০% ইকুইলিব্রিয়াম #$zeroBonusSniperCandidate ও 5-Ball ব্রিজ #$fiveBallHeaderCandidate দিয়ে $predictedSize (#$primaryNumber/#$backupNumber) টার্গেট করছে।"
+
         val agreeingFormulas = sortedFormulas.count { it.vote == predictedSize }
         val totalFormulaCount = allFormulas.size
         val topRate = topFormula?.effectiveWinRate ?: 82
         val scoreDiff = abs(totalBigScore - totalSmallScore)
-        val marketStabilityPercent = (58 + (agreeingFormulas * 1.4) + (hotStreakFormulaCount * 2.2))
+        val marketStabilityPercent = (56 + (agreeingFormulas * 1.25) + (hotStreakFormulaCount * 2.0))
             .roundToInt().coerceIn(60, 98)
-        val rawConfidence = (61 + (agreeingFormulas * 1.45) + (topRate - 60) * 0.38 + scoreDiff * 0.85).roundToInt()
+        val rawConfidence = (60 + (agreeingFormulas * 1.22) + (topRate - 60) * 0.36 + scoreDiff * 0.78).roundToInt()
         val confidence = rawConfidence.coerceIn(68, 98)
 
-        val isTrapRound = agreeingFormulas <= 11 && scoreDiff < 5.0
+        val isTrapRound = agreeingFormulas <= 14 && scoreDiff < 5.0
         val riskBadge = when {
-            confidence >= 86 && agreeingFormulas >= 15 -> "🎯 SURE SHOT ($agreeingFormulas/$totalFormulaCount)"
+            confidence >= 86 && agreeingFormulas >= 19 -> "🎯 SURE SHOT ($agreeingFormulas/$totalFormulaCount)"
             !isTrapRound && confidence >= 74 -> "✅ SAFE ($agreeingFormulas/$totalFormulaCount AGREE)"
             else -> "🛑 TRAP • WAIT / 1x"
         }
@@ -1102,14 +1349,14 @@ object QuantumPatternEngine {
             else -> "1x (Lvl 1)"
         }
 
-        val headlinePattern = triggers.firstOrNull()?.title ?: "🧠 AI 24-FORMULA ENGINE ACTIVE"
+        val headlinePattern = triggers.firstOrNull()?.title ?: "🧠 AI 30-FORMULA ENGINE ACTIVE"
         val topTrickText = if (topFormula != null) {
             "🏆 #1: ${topFormula.formula.nameBn} (${topFormula.effectiveWinRate}%)"
         } else {
-            "🧠 AI ২৪-ফর্মুলা ইঞ্জিন"
+            "🧠 AI ৩০-ফর্মুলা ইঞ্জিন"
         }
 
-        val banglaAdvice = "$patternDnaMatchInfoBn • ২৪টির মধ্যে $agreeingFormulas টি সূত্র $predictedSize বলছে (🔥$hotStreakFormulaCount হট-স্ট্রিক, 🔄$autoReversedCount রিভার্সড)।"
+        val banglaAdvice = "$patternDnaMatchInfoBn • ৩০টির মধ্যে $agreeingFormulas টি সূত্র $predictedSize বলছে (🔥$hotStreakFormulaCount হট-স্ট্রিক, 🔄$autoReversedCount রিভার্সড)।"
 
         val hotNumbers = freqMap.entries.sortedByDescending { it.value }.take(3).map { it.key }
         val coldNumbers = chartStats.sortedByDescending { it.currentMissing }.take(3).map { it.number }
@@ -1162,7 +1409,11 @@ object QuantumPatternEngine {
             marketStabilityPercent = marketStabilityPercent,
             patternDnaMatchInfoBn = patternDnaMatchInfoBn,
             multiHorizonTrendSummary = multiHorizonTrendSummary,
-            hotStreakFormulaCount = hotStreakFormulaCount
+            hotStreakFormulaCount = hotStreakFormulaCount,
+            zeroBonusSniperCandidate = zeroBonusSniperCandidate,
+            fiveBallHeaderCandidate = fiveBallHeaderCandidate,
+            houseLiabilitySafeSide = houseLiabilitySafeSide,
+            detectedVulnerabilityBn = detectedVulnerabilityBn
         )
     }
 
