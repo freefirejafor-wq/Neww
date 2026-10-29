@@ -1,0 +1,350 @@
+package com.example.ui
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.example.data.local.PredictionRecordEntity
+import com.example.data.model.DrawItem
+import com.example.data.model.GameMode
+import com.example.data.model.QuantumPrediction
+import com.example.data.remote.WinGoApiClient
+import com.example.data.repository.WinGoRepository
+import com.example.domain.QuantumPatternEngine
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+
+enum class EngineTab {
+    LIVE_SIGNAL,
+    ANALYTICS,
+    FUND_PLANNER,
+    WEB_ENGINE
+}
+
+data class FundStepItem(
+    val level: Int,
+    val multiplier: Int,
+    val betAmount: Int,
+    val cumulativeCost: Int,
+    val netProfitIfWin: Int
+)
+
+data class WinGoUiState(
+    val selectedMode: GameMode = GameMode.MODE_30S,
+    val selectedTab: EngineTab = EngineTab.LIVE_SIGNAL,
+    val remainingSeconds: Int = 30,
+    val timerProgress: Float = 1f,
+    val draws: List<DrawItem> = emptyList(),
+    val prediction: QuantumPrediction = QuantumPatternEngine.analyze(emptyList()),
+    val isLiveApiConnected: Boolean = true,
+    val apiStatusText: String = "CONNECTING TO WINGO 30S...",
+    val isSyncing: Boolean = false,
+    val syncTriggerCount: Int = 0,
+    val matrixAnimationEnabled: Boolean = true,
+    val winNotificationEnabled: Boolean = true,
+    val voiceAlertEnabled: Boolean = true,
+    val isMiniHudMode: Boolean = true,
+    val latestWinRecord: PredictionRecordEntity? = null,
+    val isEnergyPanelHooked: Boolean = false,
+    val liveWalletBalance: String? = null,
+    val lastServerWinLossPopup: String? = null,
+    val totalCapitalInput: String = "1000",
+    val dailyTargetProfitInput: String = "500",
+    val stopLossLimitInput: String = "300",
+    val selectedStepCount: Int = 5,
+    val multiplierScale: Float = 2.0f
+) {
+    val fundSteps: List<FundStepItem>
+        get() {
+            val capital = totalCapitalInput.toIntOrNull()?.coerceAtLeast(50) ?: 1000
+            val steps = selectedStepCount.coerceIn(3, 8)
+            val weights = (0 until steps).map { idx ->
+                Math.pow(multiplierScale.toDouble(), idx.toDouble())
+            }
+            val totalWeight = weights.sum()
+            val baseUnit = (capital / totalWeight).coerceAtLeast(1.0)
+            var cumulative = 0
+            return weights.mapIndexed { idx, w ->
+                val bet = (baseUnit * w).roundToInt().coerceAtLeast(1)
+                cumulative += bet
+                val grossReturn = (bet * 1.96).roundToInt()
+                val netProfit = grossReturn - cumulative
+                FundStepItem(
+                    level = idx + 1,
+                    multiplier = w.roundToInt(),
+                    betAmount = bet,
+                    cumulativeCost = cumulative,
+                    netProfitIfWin = netProfit
+                )
+            }
+        }
+
+    fun computeSessionPnL(records: List<PredictionRecordEntity>): Int {
+        val steps = fundSteps
+        if (steps.isEmpty()) return 0
+        val chronological = records.filter { it.isWin != null }.reversed()
+        var currentLvlIdx = 0
+        var netPnL = 0
+        for (rec in chronological) {
+            val step = steps.getOrElse(currentLvlIdx) { steps.last() }
+            if (rec.isWin == true) {
+                val winReturn = (step.betAmount * 0.96).roundToInt().coerceAtLeast(1)
+                netPnL += winReturn
+                currentLvlIdx = 0
+            } else {
+                netPnL -= step.betAmount
+                currentLvlIdx = if (currentLvlIdx + 1 < steps.size) currentLvlIdx + 1 else 0
+            }
+        }
+        return netPnL
+    }
+}
+
+class WinGoViewModel(
+    private val repository: WinGoRepository
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(WinGoUiState())
+    val uiState: StateFlow<WinGoUiState> = _uiState.asStateFlow()
+
+    private val _selectedModeFlow = MutableStateFlow(GameMode.MODE_30S)
+    private var lastWebViewUpdateMs: Long = 0L
+    private var latestRealEnergyMap: Map<Int, Pair<Int, Int>>? = null
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val modeRecords: StateFlow<List<PredictionRecordEntity>> = _selectedModeFlow
+        .flatMapLatest { mode -> repository.observeRecordsByMode(mode.key) }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    init {
+        startCountdownLoop()
+        startPollingLoop()
+    }
+
+    private fun startCountdownLoop() {
+        viewModelScope.launch {
+            while (isActive) {
+                val periodMs = GameMode.MODE_30S.periodMs
+                val now = System.currentTimeMillis()
+                val remainMs = periodMs - (now % periodMs)
+                val remainSec = ((remainMs + 999L) / 1000L).toInt()
+                val progress = (remainMs.toFloat() / periodMs.toFloat()).coerceIn(0f, 1f)
+
+                _uiState.update {
+                    it.copy(
+                        remainingSeconds = remainSec,
+                        timerProgress = progress
+                    )
+                }
+                delay(250L)
+            }
+        }
+    }
+
+    private fun startPollingLoop() {
+        viewModelScope.launch {
+            while (isActive) {
+                if (System.currentTimeMillis() - lastWebViewUpdateMs > 3000L) {
+                    pollNow()
+                }
+                delay(2000L)
+            }
+        }
+    }
+
+    fun onWebViewJsonReceived(json: String) {
+        viewModelScope.launch {
+            var energyUpdated = false
+            try {
+                // 1. Check /api/Energy/GetPanel?gameCode=WinGo_30S or DOM energyPercents
+                if (json.contains("Energy/GetPanel") || json.contains("energyPercents") || json.contains("panelList")) {
+                    val parsedEnergy = WinGoApiClient.parseEnergyPanelJson(json)
+                    if (parsedEnergy != null) {
+                        latestRealEnergyMap = parsedEnergy
+                        energyUpdated = true
+                        _uiState.update { it.copy(isEnergyPanelHooked = true) }
+                    }
+                }
+                // 2. Check /api/Lottery/GetBalance
+                if (json.contains("Lottery/GetBalance") || json.contains("\"balance\"") || json.contains("\"amount\"")) {
+                    val bal = WinGoApiClient.parseWalletBalanceJson(json)
+                    if (bal != null) {
+                        val formatted = String.format(java.util.Locale.US, "৳%.2f", bal)
+                        _uiState.update { it.copy(liveWalletBalance = formatted) }
+                    }
+                }
+                // 3. Check /api/Lottery/GetWinLossResult
+                if (json.contains("Lottery/GetWinLossResult") || json.contains("winAmount")) {
+                    val popupResult = WinGoApiClient.parseWinLossResultJson(json)
+                    if (popupResult != null) {
+                        _uiState.update { it.copy(lastServerWinLossPopup = popupResult) }
+                    }
+                }
+            } catch (_: Throwable) {}
+
+            val parsed = repository.parseWebViewJson(json)
+            if (parsed.isNotEmpty()) {
+                lastWebViewUpdateMs = System.currentTimeMillis()
+                val accumulated = repository.persistAndGetAccumulatedDraws(
+                    GameMode.MODE_30S.key,
+                    parsed
+                )
+                applyDrawsToEngine(
+                    draws = accumulated,
+                    isLive = true,
+                    statusMessage = "LIVE 30S API (VAULT: ${accumulated.size})"
+                )
+            } else if (energyUpdated && _uiState.value.draws.isNotEmpty()) {
+                applyDrawsToEngine(
+                    draws = _uiState.value.draws,
+                    isLive = _uiState.value.isLiveApiConnected,
+                    statusMessage = "GETPANEL ENERGY 30S HOOKED"
+                )
+            }
+        }
+    }
+
+    fun selectMode(mode: GameMode) {
+        // Locked to WinGo 30S only
+        forceSync()
+    }
+
+    fun selectTab(tab: EngineTab) {
+        _uiState.update { it.copy(selectedTab = tab) }
+    }
+
+    fun toggleMatrixAnimation() {
+        _uiState.update { it.copy(matrixAnimationEnabled = !it.matrixAnimationEnabled) }
+    }
+
+    fun setWinNotificationEnabled(enabled: Boolean) {
+        _uiState.update { it.copy(winNotificationEnabled = enabled) }
+    }
+
+    fun setVoiceAlertEnabled(enabled: Boolean) {
+        _uiState.update { it.copy(voiceAlertEnabled = enabled) }
+    }
+
+    fun toggleMiniHudMode() {
+        _uiState.update { it.copy(isMiniHudMode = !it.isMiniHudMode) }
+    }
+
+    fun updateCapitalInput(value: String) {
+        val filtered = value.filter { it.isDigit() }.take(7)
+        _uiState.update { it.copy(totalCapitalInput = filtered) }
+    }
+
+    fun updateDailyTargetInput(value: String) {
+        val filtered = value.filter { it.isDigit() }.take(6)
+        _uiState.update { it.copy(dailyTargetProfitInput = filtered) }
+    }
+
+    fun updateStopLossInput(value: String) {
+        val filtered = value.filter { it.isDigit() }.take(6)
+        _uiState.update { it.copy(stopLossLimitInput = filtered) }
+    }
+
+    fun updateStepCount(steps: Int) {
+        _uiState.update { it.copy(selectedStepCount = steps.coerceIn(3, 7)) }
+    }
+
+    fun updateMultiplierScale(scale: Float) {
+        _uiState.update { it.copy(multiplierScale = scale) }
+    }
+
+    fun resetCurrentModeStats() {
+        viewModelScope.launch {
+            repository.clearModeStats(GameMode.MODE_30S.key)
+            pollNow()
+        }
+    }
+
+    fun forceSync() {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isSyncing = true,
+                    syncTriggerCount = it.syncTriggerCount + 1
+                )
+            }
+            pollNow()
+        }
+    }
+
+    private suspend fun pollNow() {
+        try {
+            val result = repository.fetchLiveDraws(GameMode.MODE_30S)
+            if (result.draws.isNotEmpty()) {
+                applyDrawsToEngine(
+                    draws = result.draws,
+                    isLive = result.isLiveApi,
+                    statusMessage = result.statusMessage
+                )
+            }
+        } catch (_: Throwable) {
+            _uiState.update { it.copy(isSyncing = false) }
+        }
+    }
+
+    private suspend fun applyDrawsToEngine(
+        draws: List<DrawItem>,
+        isLive: Boolean,
+        statusMessage: String
+    ) {
+        val newlyWon = repository.resolveAndStorePrediction(GameMode.MODE_30S, draws)
+
+        val latestRecords = repository.getRecentRecordsByMode(GameMode.MODE_30S.key)
+        val resolvedRecords = latestRecords.filter { it.isWin != null }
+        var currentWinStreak = 0
+        var currentLossStreak = 0
+        for (r in resolvedRecords) {
+            if (r.isWin == true) {
+                if (currentLossStreak == 0) currentWinStreak++ else break
+            } else if (r.isWin == false) {
+                if (currentWinStreak == 0) currentLossStreak++ else break
+            }
+        }
+
+        val quantumPred = QuantumPatternEngine.analyze(
+            draws = draws,
+            recentWinStreak = currentWinStreak,
+            recentLossStreak = currentLossStreak,
+            liveRealEnergyMap = latestRealEnergyMap
+        )
+
+        _uiState.update {
+            it.copy(
+                draws = draws,
+                prediction = quantumPred,
+                isLiveApiConnected = isLive,
+                apiStatusText = statusMessage,
+                isSyncing = false,
+                latestWinRecord = newlyWon.firstOrNull() ?: it.latestWinRecord
+            )
+        }
+    }
+
+    companion object {
+        fun provideFactory(repository: WinGoRepository): ViewModelProvider.Factory {
+            return object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                    return WinGoViewModel(repository) as T
+                }
+            }
+        }
+    }
+}
